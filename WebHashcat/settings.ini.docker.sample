@@ -1,0 +1,20 @@
+[Hashcat]
+binary = /hashcat/hashcat
+potfile = /webhashcat/Files/potfile
+integrity = filename
+
+[LDAP]
+enabled = true
+url = ldap://ldap.company.internal
+bind_user = uid=bind_hashcat,cn=users,dc=company,dc=internal
+bind_password = bind_hashcat_password
+user_search_dn = cn=users,dc=company,dc=internal
+user_search_query = (uid=%(user)s)
+user_dn_template = uid=%(user)s,cn=users,dc=company,dc=internal
+group_search_dn = cn=groups,dc=company,dc=internal
+group_search_query = (objectClass=group)
+is_staff = cn=admins,cn=groups,dc=company,dc=internal
+is_superuser = cn=admins,cn=groups,dc=company,dc=internal
+user_first_name = givenName
+user_last_name = sn
+user_email = email

@@ -16,6 +16,7 @@ from celery.schedules import crontab
 from celery.utils.log import get_task_logger
 from celery.signals import celeryd_after_setup
 from django.db import connection
+from django.utils.html import escape
 
 from Hashcat.models import Session, Hashfile, Hash, Search
 from Utils.hashcat import Hashcat
@@ -47,24 +48,24 @@ def import_hashfile_task(hashfile_id):
 
     task = Task(
         time = datetime.datetime.now(),
-        message = "Importing hash file %s..." % hashfile.name
+        message = "Importing hash file %s..." % escape(hashfile.name)
     )
     task.save()
 
     try:
 
         if hashfile.hash_type != -1: # if != plaintext
-            task.message = "Importing hash file %s..." % hashfile.name
+            task.message = "Importing hash file %s..." % escape(hashfile.name)
             task.save()
 
             Hashcat.insert_hashes(hashfile)
 
-            task.message = "Comparing hash file %s to potfile..." % hashfile.name
+            task.message = "Comparing hash file %s to potfile..." % escape(hashfile.name)
             task.save()
 
             Hashcat.compare_potfile(hashfile)
         else:
-            task.message = "Importing plaintext file %s..." % hashfile.name
+            task.message = "Importing plaintext file %s..." % escape(hashfile.name)
             task.save()
 
             Hashcat.insert_plaintext(hashfile)
@@ -80,7 +81,7 @@ def remove_hashfile_task(hashfile_id):
 
     task = Task(
         time = datetime.datetime.now(),
-        message = "Removing hash file %s..." % hashfile.name
+        message = "Removing hash file %s..." % escape(hashfile.name)
     )
     task.save()
 
@@ -98,7 +99,7 @@ def run_search_task(search_id):
 
     task = Task(
         time = datetime.datetime.now(),
-        message = "Running search %s..." % search.name
+        message = "Running search %s..." % escape(search.name)
     )
     task.save()
 

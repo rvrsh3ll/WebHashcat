@@ -17,6 +17,7 @@ def main(run_server=True):
     config.read(current_dir + os.sep + 'settings.ini')
 
     loglevel_str = config["General"]["loglevel"]
+    integrity_algo = config["General"]["integrity"]
 
     bind_address = config["Server"]["bind"]
     bind_port = config["Server"]["port"]
@@ -34,6 +35,7 @@ def main(run_server=True):
 
     binary = config["Hashcat"]["binary"]
     hashes_dir = config["Hashcat"]["hashes_dir"]
+    custom_dir = config["Hashcat"]["custom_dir"]
     rules_dir = config["Hashcat"]["rule_dir"]
     mask_dir = config["Hashcat"]["mask_dir"]
     wordlist_dir = config["Hashcat"]["wordlist_dir"]
@@ -61,6 +63,7 @@ def main(run_server=True):
 
     logging.info("Hashcat node starting")
 
+    Hashcat.integrity_algo = integrity_algo
     Hashcat.binary = binary
     Hashcat.rules_dir = rules_dir
     Hashcat.wordlist_dir = wordlist_dir
@@ -82,7 +85,7 @@ def main(run_server=True):
     Hashcat.reload_sessions()
 
     if run_server:
-        httpsServer = Server(bind_address, bind_port, username, username_hash, hashes_dir)
+        httpsServer = Server(bind_address, bind_port, username, username_hash, hashes_dir, custom_dir)
         httpsServer.start_server()
 
     return Hashcat

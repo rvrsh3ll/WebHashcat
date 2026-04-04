@@ -49,7 +49,7 @@ class Hashcat(object):
         hash_mode_regex = re.compile("^\s*(?P<id>\d+)\s+\|\s+(?P<name>.+)\s+\|\s+(?P<description>.+)\s*$")
 
         # cwd needs to be added for Windows version of hashcat
-        hashcat_help = subprocess.Popen([self.binary, '--help'], stdout=subprocess.PIPE, cwd=os.path.dirname(self.binary))
+        hashcat_help = subprocess.Popen([self.binary, '-hh'], stdout=subprocess.PIPE, cwd=os.path.dirname(self.binary))
         for line in hashcat_help.stdout:
             line = line.decode()
             line = line.rstrip()
@@ -62,7 +62,7 @@ class Hashcat(object):
                 help_section = section_match.group("section_name")
                 continue
 
-            if help_section == "Hash modes":
+            if help_section == "Hash Modes":
                 hash_mode_match = hash_mode_regex.match(line)
                 if hash_mode_match:
                     self.hash_modes[int(hash_mode_match.group("id"))] = {
@@ -70,6 +70,16 @@ class Hashcat(object):
                         "name": hash_mode_match.group("name"),
                         "description": hash_mode_match.group("description"),
                     }
+
+    """
+        Reload Masks / Rules / Wordlists
+    """
+    @classmethod
+    def reload_new(self):
+        self.parse_rules()
+        self.parse_wordlists()
+        self.parse_masks()
+
     """
         Parse rule directory
     """
@@ -80,19 +90,29 @@ class Hashcat(object):
         file_list = [join(self.rules_dir, f) for f in listdir(self.rules_dir) if isfile(join(self.rules_dir, f)) and f != ".gitkeep"]
 
         for file in file_list:
-            with open(file, "rb") as f:
-                file_hash = hashlib.md5()
-                while True:
-                    chunk = f.read(8192)
-                    if not chunk:
-                        break
-                    file_hash.update(chunk)
+            if self.integrity_algo == "md5":
 
-                self.rules[os.path.basename(file)] = {
-                    "name": os.path.basename(file),
-                    "md5": file_hash.hexdigest(),
-                    "path": file,
-                }
+                with open(file, "rb") as f:
+                    file_hash = hashlib.md5()
+                    while True:
+                        chunk = f.read(8192)
+                        if not chunk:
+                            break
+                        file_hash.update(chunk)
+
+                    file_hash = file_hash.hexdigest()
+            elif self.integrity_algo == "filename":
+                filename = os.path.basename(file)
+
+                file_hash = hashlib.md5()
+                file_hash.update(filename.encode())
+                file_hash = file_hash.hexdigest()
+
+            self.rules[os.path.basename(file)] = {
+                "name": os.path.basename(file),
+                "md5": file_hash,
+                "path": file,
+            }
 
         # Not comptatible with windows, lets make a pure python version
         """
@@ -121,19 +141,30 @@ class Hashcat(object):
         file_list = [join(self.wordlist_dir, f) for f in listdir(self.wordlist_dir) if isfile(join(self.wordlist_dir, f)) and f != ".gitkeep"]
 
         for file in file_list:
-            with open(file, "rb") as f:
-                file_hash = hashlib.md5()
-                while True:
-                    chunk = f.read(8192)
-                    if not chunk:
-                        break
-                    file_hash.update(chunk)
+            if self.integrity_algo == "md5":
 
-                self.wordlists[os.path.basename(file)] = {
-                    "name": os.path.basename(file),
-                    "md5": file_hash.hexdigest(),
-                    "path": file,
-                }
+                with open(file, "rb") as f:
+                    file_hash = hashlib.md5()
+                    while True:
+                        chunk = f.read(8192)
+                        if not chunk:
+                            break
+                        file_hash.update(chunk)
+
+                    file_hash = file_hash.hexdigest()
+            elif self.integrity_algo == "filename":
+                filename = os.path.basename(file)
+
+                file_hash = hashlib.md5()
+                file_hash.update(filename.encode())
+                file_hash = file_hash.hexdigest()
+
+            self.wordlists[os.path.basename(file)] = {
+                "name": os.path.basename(file),
+                "md5": file_hash,
+                "path": file,
+            }
+
 
         # Not comptatible with windows, lets make a pure python version
         """
@@ -162,19 +193,29 @@ class Hashcat(object):
         file_list = [join(self.mask_dir, f) for f in listdir(self.mask_dir) if isfile(join(self.mask_dir, f)) and f != ".gitkeep"]
 
         for file in file_list:
-            with open(file, "rb") as f:
-                file_hash = hashlib.md5()
-                while True:
-                    chunk = f.read(8192)
-                    if not chunk:
-                        break
-                    file_hash.update(chunk)
+            if self.integrity_algo == "md5":
 
-                self.masks[os.path.basename(file)] = {
-                    "name": os.path.basename(file),
-                    "md5": file_hash.hexdigest(),
-                    "path": file,
-                }
+                with open(file, "rb") as f:
+                    file_hash = hashlib.md5()
+                    while True:
+                        chunk = f.read(8192)
+                        if not chunk:
+                            break
+                        file_hash.update(chunk)
+
+                    file_hash = file_hash.hexdigest()
+            elif self.integrity_algo == "filename":
+                filename = os.path.basename(file)
+
+                file_hash = hashlib.md5()
+                file_hash.update(filename.encode())
+                file_hash = file_hash.hexdigest()
+
+            self.masks[os.path.basename(file)] = {
+                "name": os.path.basename(file),
+                "md5": file_hash,
+                "path": file,
+            }
 
         # Not comptatible with windows, lets make a pure python version
         """
@@ -197,7 +238,7 @@ class Hashcat(object):
         Create a new session
     """
     @classmethod
-    def create_session(self, name, crack_type, hash_file, hash_mode_id, wordlist, rule, mask, username_included, device_type, brain_mode, end_timestamp, hashcat_debug_file):
+    def create_session(self, name, crack_type, hash_file, hash_mode_id, wordlist, custom_file, rule, mask, username_included, device_type, brain_mode, end_timestamp, hashcat_debug_file):
 
         if name in self.sessions:
             raise Exception("This session name has already been used")
@@ -222,15 +263,22 @@ class Hashcat(object):
             else:
                 rule_path = self.rules[rule]["path"]
 
-            if wordlist == None or not wordlist in self.wordlists:
-                raise Exception("Inexistant wordlist, did you synchronise the files on your node ?")
-            wordlist_path = self.wordlists[wordlist]["path"]
+            if wordlist != "Custom":
+                if wordlist == None or not wordlist in self.wordlists:
+                    raise Exception("Inexistant wordlist, did you synchronise the files on your node ?")
+                wordlist_path = self.wordlists[wordlist]["path"]
+            else:
+                wordlist_path = "Custom"
 
             mask_path = None
         elif crack_type == "mask":
-            if mask == None or not mask in self.masks:
-                raise Exception("Inexistant mask, did you synchronise the files on your node ?")
-            mask_path = self.masks[mask]["path"]
+            if mask != "Custom":
+                if mask == None or not mask in self.masks:
+                    raise Exception("Inexistant mask, did you synchronise the files on your node ?")
+                mask_path = self.masks[mask]["path"]
+            else:
+                mask_path = 'Custom'
+
             rule_path = None
             wordlist_path = None
 
@@ -248,6 +296,7 @@ class Hashcat(object):
             pot_file = pot_file,
             hash_mode_id=hash_mode_id,
             wordlist_file=wordlist_path,
+            custom_file=custom_file,
             rule_file=rule_path,
             mask_file=mask_path,
             username_included=username_included,
@@ -260,7 +309,7 @@ class Hashcat(object):
             progress=0,
             reason="",
         )
-        self.sessions[session.name] = session
+        self.sessions[str(session.name)] = session
         session.setup()
         session.save()
 
@@ -295,7 +344,7 @@ class Hashcat(object):
                 session.session_status = "Aborted"
                 session.reason = ""
                 session.save()
-            self.sessions[session.name] = session
+            self.sessions[str(session.name)] = session
             session.setup()
 
     """
@@ -400,6 +449,7 @@ class Session(Model):
     hash_mode_id = IntegerField()
     rule_file = CharField(null=True)
     wordlist_file = CharField(null=True)
+    custom_file = CharField(null=True)
     mask_file = CharField(null=True)
     username_included = BooleanField()
     device_type = IntegerField()
@@ -447,25 +497,39 @@ class Session(Model):
         # Prepare regex to parse the main hashcat process output
         regex_list = [
             ("hash_type", re.compile("^Hash\.Type\.+: +(.*)\s*$")),
-            ("speed", re.compile("^Speed\.#1\.+: +(.*)\s*$")),
+            ("speed", re.compile("^Speed\.#\*\.+: +(.*)\s*$")),
+
         ]
         if self.crack_type == "dictionary":
             regex_list.append(("progress", re.compile("^Progress\.+: +\d+/\d+ \((\S+)%\)\s*$")))
             regex_list.append(("time_estimated", re.compile("^Time\.Estimated\.+: +(.*)\s*$")))
         elif self.crack_type == "mask":
-            regex_list.append(("progress", re.compile("^Input\.Mode\.+: +Mask\s+\(\S+\)\s+\[\d+\]\s+\((\S+)%\)\s*$")))
+            regex_list.append(("time", re.compile("^Time\.Estimated\.+: +(.*)\s*$")))
+            regex_list.append(("progress", re.compile("^Guess\.Queue\.+: +\d+/\d+ \((\S+)%\)\s*$")))
+            regex_list.append(("time_estimated", re.compile("^Guess\.Queue\.+: +(.*)\s*$"), "time"))
 
         self.time_started = str(datetime.now())
 
         if not self.session_status in ["Aborted"]:
             # Command lines used to crack the passwords
             if self.crack_type == "dictionary":
-                if self.rule_file != None:
-                    cmd_line = [Hashcat.binary, '--session', self.name, '--status', '-a', '0', '-m', str(self.hash_mode_id), self.hash_file, self.wordlist_file, '-r', self.rule_file]
+                cmd_line = [Hashcat.binary, '--session', self.name, '--status', '-a', '0', '-m', str(self.hash_mode_id), self.hash_file]
+                if self.wordlist_file == 'Custom':
+                    cmd_line += [self.custom_file]
                 else:
-                    cmd_line = [Hashcat.binary, '--session', self.name, '--status', '-a', '0', '-m', str(self.hash_mode_id), self.hash_file, self.wordlist_file]
+                    cmd_line += [self.wordlist_file]
+
+                if self.rule_file != None:
+                    cmd_line += ['-r', self.rule_file]
+
             if self.crack_type == "mask":
-                cmd_line = [Hashcat.binary, '--session', self.name, '--status', '-a', '3', '-m', str(self.hash_mode_id), self.hash_file, self.mask_file]
+                cmd_line = [Hashcat.binary, '--session', self.name, '--status', '-a', '3', '-m', str(self.hash_mode_id), self.hash_file]
+
+                if self.mask_file == 'Custom':
+                    cmd_line += [self.custom_file]
+                else:
+                    cmd_line += [self.mask_file]
+
             if self.username_included:
                 cmd_line += ["--username"]
             if self.device_type:
@@ -524,11 +588,13 @@ class Session(Model):
             line = line.decode()
             line = line.rstrip()
 
-            if line == "Resumed":
+            print(line)
+
+            if line.startswith("Resumed"):
                 self.session_status = "Running"
                 self.save()
 
-            if line == "Paused":
+            if line.startswith("Paused"):
                 self.session_status = "Paused"
                 self.save()
 
@@ -538,7 +604,11 @@ class Session(Model):
 
                 m = regex.match(line)
                 if m:
-                    setattr(self, var, m.group(1))
+                    if len(var_regex) == 3:
+                        tmp = getattr(self, var_regex[2])
+                        setattr(self, var, "%s %s" % (m.group(1), tmp))
+                    else:
+                        setattr(self, var, m.group(1))
 
             # check timestamp
             if self.end_timestamp:
@@ -571,13 +641,23 @@ class Session(Model):
         self.save()
 
     def details(self):
+        if self.wordlist_file == 'Custom':
+            wordlist = 'Custom'
+        else:
+            wordlist = os.path.basename(self.wordlist_file)[:-1*len(".wordlist")] if self.wordlist_file else None,
+
+        if self.mask_file == 'Custom':
+            mask = 'Custom'
+        else:
+            mask = os.path.basename(self.mask_file)[:-7] if self.mask_file else None,
+
         return {
             "name": self.name,
             "crack_type": self.crack_type,
             "device_type": self.device_type,
             "rule": os.path.basename(self.rule_file)[:-5] if self.rule_file else None,
-            "mask": os.path.basename(self.mask_file)[:-7] if self.mask_file else None,
-            "wordlist": os.path.basename(self.wordlist_file)[:-1*len(".wordlist")] if self.wordlist_file else None,
+            "mask": mask,
+            "wordlist": wordlist,
             "status": self.session_status,
             "time_started": str(self.time_started),
             "time_estimated": self.time_estimated,
@@ -658,6 +738,10 @@ class Session(Model):
             os.remove(self.hashcat_output_file)
         except:
             pass
+        try:
+            os.remove(self.custom_file)
+        except:
+            pass
 
     """
         Return cracked passwords
@@ -708,9 +792,11 @@ class Session(Model):
         Pause the session
     """
     def pause(self):
+        print("pause")
         if not self.session_status in ["Paused", "Running"]:
             return
 
+        print(os.name)
         if os.name == 'nt':
             evt = win32console.PyINPUT_RECORDType(win32console.KEY_EVENT)
             evt.Char = 'p'
@@ -719,6 +805,7 @@ class Session(Model):
             evt.VirtualKeyCode=0x0
             self.win_stdin.WriteConsoleInput([evt])
         else:
+            print("P")
             try:
                 self.session_process.stdin.write(b'p')
                 self.session_process.stdin.flush()
@@ -731,6 +818,7 @@ class Session(Model):
         Resume the session
     """
     def resume(self):
+        print("resume")
         if not self.session_status in ["Paused", "Running"]:
             return
 
@@ -743,6 +831,7 @@ class Session(Model):
             self.win_stdin.WriteConsoleInput([evt])
         else:
             try:
+                print("R")
                 self.session_process.stdin.write(b'r')
                 self.session_process.stdin.flush()
             except BrokenPipeError:
@@ -771,8 +860,15 @@ class Session(Model):
             except BrokenPipeError:
                 pass
 
-        print("Waiting for thread to end....")
-        self.thread.join()
+        print("Waiting for 5 seconds for the thread to end....")
+        self.thread.join(5)
+
+        if self.thread.is_alive():
+            self.session_process.kill()
+
+            print("SIGTERM sent, Waiting for the thread to end....")
+            self.thread.join()
+
         print("Done")
 
         self.session_status = "Aborted"

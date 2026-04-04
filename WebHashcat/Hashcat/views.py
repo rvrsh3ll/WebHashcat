@@ -26,6 +26,7 @@ from django.db import connection
 from django.contrib import messages
 from django.db.utils import OperationalError
 from django.contrib.admin.views.decorators import staff_member_required
+from django.utils.html import escape
 
 from django.shortcuts import get_object_or_404
 
@@ -56,13 +57,19 @@ def hashfiles(request):
 
     if request.method == 'POST':
         if request.POST["action"] == "add":
+            name = request.POST['name'].strip()
+
+            if len(name) == 0:
+                messages.error(request, "Error: Empty name")
+                return redirect('Hashcat:hashfiles')
+
             hash_type=int(request.POST["hash_type"])
 
             hashfile_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(12)) + ".hashfile"
             hashfile_path = os.path.join(os.path.dirname(__file__), "..", "Files", "Hashfiles", hashfile_name)
 
             hashes = request.POST["hashes"]
-            f = open(hashfile_path, 'w')
+            f = open(hashfile_path, 'w', encoding='utf8')
             if len(hashes) == 0 and "hashfile" in request.FILES:
                 for chunk in request.FILES['hashfile'].chunks():
                     f.write(chunk.decode('UTF-8', 'backslashreplace'))
@@ -74,7 +81,7 @@ def hashfiles(request):
 
             hashfile = Hashfile(
                 owner=request.user,
-                name=request.POST['name'],
+                name=name,
                 hashfile=hashfile_name,
                 hash_type=hash_type,
                 line_count=0,
@@ -95,8 +102,8 @@ def hashfiles(request):
     context["node_list"] = Node.objects.all()
     context["hash_type_list"] = [{'id': -1, 'name': 'Plaintext'}] + sorted(list(Hashcat.get_hash_types().values()), key=itemgetter('name'))
     context["rule_list"] = [{'name': None}] + sorted(Hashcat.get_rules(detailed=False), key=itemgetter('name'))
-    context["mask_list"] = sorted(Hashcat.get_masks(detailed=False), key=itemgetter('name'))
-    context["wordlist_list"] = sorted(Hashcat.get_wordlists(detailed=False), key=itemgetter('name'))
+    context["mask_list"] = [{'name': 'Custom'}] + sorted(Hashcat.get_masks(detailed=False), key=itemgetter('name'))
+    context["wordlist_list"] = [{'name': 'Custom'}] + sorted(Hashcat.get_wordlists(detailed=False), key=itemgetter('name'))
 
     template = loader.get_template('Hashcat/hashes.html')
     return HttpResponse(template.render(context, request))
@@ -186,11 +193,39 @@ def new_session(request):
             raise Http404("You do not have permission to view this object")
 
         crack_type = request.POST["crack_type"]
+
+        custom_words = []
+        for word in request.POST["custom_words"].split("\n"):
+            word = word.strip()
+
+            if len(word) != 0:
+                custom_words.append(word)
+
+
         if crack_type == "dictionary":
             rule = request.POST["rule"] if request.POST["rule"] != "None" else None
             wordlist = request.POST["wordlist"]
+
+            if wordlist != 'Custom' and len(custom_words) > 0:
+                messages.error(request, "Select 'Custom' wordlist if you want to specify custom words")
+                return redirect('Hashcat:hashfiles')
+
+            if wordlist == 'Custom' and len(custom_words) == 0:
+                messages.error(request, "Please specify custom words if you want to use the 'Custom' wordlist")
+                return redirect('Hashcat:hashfiles')
+
         elif crack_type == "mask":
             mask = request.POST["mask"]
+
+            if mask != 'Custom' and len(custom_words) > 0:
+                messages.error(request, "Select 'Custom' mask if you want to specify custom masks")
+                return redirect('Hashcat:hashfiles')
+
+            if mask == 'Custom' and len(custom_words) == 0:
+                messages.error(request, "Please specify custom masks if you want to use the 'Custom' mask")
+                return redirect('Hashcat:hashfiles')
+
+
 
         device_type = int(request.POST["device_type"])
         brain_mode = int(request.POST["brain_mode"])
@@ -200,28 +235,12 @@ def new_session(request):
         else:
             end_timestamp = None
 
-        session_name = ("%s-%s" % (hashfile.name, ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(12)))).replace(" ", "_")
+        session_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(20))
 
         if "debug" in request.POST:
             hashcat_debug_file = True
         else:
             hashcat_debug_file = False
-
-        try:
-            hashcat_api = HashcatAPI(node.hostname, node.port, node.username, node.password)
-            if crack_type == "dictionary":
-                res = hashcat_api.create_dictionary_session(session_name, hashfile, rule, wordlist, device_type, brain_mode, end_timestamp, hashcat_debug_file)
-            elif crack_type == "mask":
-                res = hashcat_api.create_mask_session(session_name, hashfile, mask, device_type, brain_mode, end_timestamp, hashcat_debug_file)
-        except requests.exceptions.ConnectionError: 
-            messages.error(request, "Node %s not accessible" % node_name)
-            return redirect('Hashcat:hashfiles')
-
-        if res["response"] == "error":
-            messages.error(request, res["message"])
-            return redirect('Hashcat:hashfiles')
-
-        messages.success(request, "Session successfully created")
 
         session = Session(
                 name=session_name,
@@ -230,6 +249,27 @@ def new_session(request):
                 potfile_line_retrieved=0,
         )
         session.save()
+
+        try:
+            hashcat_api = HashcatAPI(node.hostname, node.port, node.username, node.password)
+            if crack_type == "dictionary":
+                res = hashcat_api.create_dictionary_session(session.name, hashfile, rule, wordlist, custom_words, device_type, brain_mode, end_timestamp, hashcat_debug_file)
+            elif crack_type == "mask":
+                res = hashcat_api.create_mask_session(session.name, hashfile, mask, custom_words, device_type, brain_mode, end_timestamp, hashcat_debug_file)
+        except requests.exceptions.ConnectionError: 
+            session.delete()
+
+            messages.error(request, "Node %s not accessible" % node_name)
+            return redirect('Hashcat:hashfiles')
+
+        if res["response"] == "error":
+            session.delete()
+
+            messages.error(request, res["message"])
+            return redirect('Hashcat:hashfiles')
+
+        messages.success(request, "Session successfully created")
+
 
     return redirect('Hashcat:hashfiles')
 

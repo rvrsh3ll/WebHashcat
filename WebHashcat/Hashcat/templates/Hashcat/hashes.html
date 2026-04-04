@@ -16,6 +16,7 @@
                <td><b>Name</b></td>
                <td><b>Hashcat version</b></td>
                <td><b>Status</b></td>
+               <td><b>Running sessions</b></td>
             </tr>
             </thead>
             <tbody>
@@ -36,8 +37,10 @@
                "info": false,
                "pageLength": 100,
                "columnDefs": [
-                   { "width": "40%", "targets": 0},
-                   { "width": "40%", "targets": 1},
+                   { "width": "30%", "targets": 0},
+                   { "width": "30%", "targets": 1},
+                   { "width": "25%", "targets": 2},
+                   { "width": "15%", "targets": 3},
                ],
                "ajax": {
                   "url": "{% url 'API:api_node_status' %}",
@@ -76,6 +79,9 @@
                <td><b>Cracked</b></td>
                <td><b>Usernames included ?</b></td>
                <td><b>Running sessions</b></td>
+	       {% if user.is_staff %}
+               	<td><b>Created by</b></td>
+	       {% endif %}
                <td></td>
             </tr>
             </thead>
@@ -104,13 +110,18 @@
                   },
                   "width": "15px",
                 },
-                { "data": "name", "width": "20%", "targets": 1},
+                { "data": "name", "width": "15%", "targets": 1},
                 { "data": "type", "width": "20%", "targets": 2},
                 { "data": "line_count", "width": "10%", "targets": 3},
                 { "data": "cracked", "width": "12%", "targets": 4},
                 { "data": "username_included", "orderable": false, "width": "15%", "targets": 5},
                 { "data": "sessions_count", "orderable": false, "targets": 6},
+	        {% if user.is_staff %}
+                { "data": "created_by", "orderable": false, "width": "100px", "targets": 7},
+                { "data": "buttons", "orderable": false, "width": "100px", "targets": 8},
+        	{% else %}
                 { "data": "buttons", "orderable": false, "width": "100px", "targets": 7},
+	        {% endif %}
             ],
             "ajax": {
                "url": "{% url 'API:api_hashfiles' %}",
@@ -328,7 +339,7 @@
 
                <!-- Tab panes -->
                <div class="tab-content">
-                  <div role="tabpanel" class="tab-pane active" id="dictonary_bruteforce">
+                  <div role="tabpanel" class="tab-pane active" id="dictionary_bruteforce">
 
                      <form action="{% url "Hashcat:new_session" %}" enctype="multipart/form-data" method="post">
                      {% csrf_token %}
@@ -363,6 +374,12 @@
                         <option value="{{ wordlist.name }}">{{ wordlist.name }}</option>
                         {% endfor %}
                      </select>
+                     </br>
+                     </br>
+
+                     <label for="wordlist">Custom words</label>
+                     </br>
+                     <textarea name="custom_words" id="custom_words" rows="3" cols="60"></textarea>
                      </br>
                      </br>
 
@@ -441,12 +458,29 @@
                      </br>
                      </br>
 
+                     <label for="mask">Custom masks</label>
+                     </br>
+                     <textarea name="custom_words" id="custom_words" rows="3" cols="60"></textarea>
+                     </br>
+                     </br>
+
                      <label for="device_type">Device Type</label>
                      </br>
                      <select name="device_type" id="device_type">
                         <option value="2">GPU</option>
                         <option value="1">CPU</option>
                         <option value="3">FPGA, DSP, Co-Processor</option>
+                     </select>
+                     </br>
+                     </br>
+
+                     <label for="brain_mode">Brain</label>
+                     </br>
+                     <select name="brain_mode" id="brain_mode">
+                        <option value="0">Disabled</option>
+                        <option value="1">Send hashed passwords</option>
+                        <option value="2">Send attack positions</option>
+                        <option value="3">Send hashed passwords and attack positions</option>
                      </select>
                      </br>
                      </br>

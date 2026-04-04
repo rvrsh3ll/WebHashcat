@@ -3,6 +3,7 @@ version: '3.7'
 services:
   db:
     image: mysql:8.0.32-debian
+    restart: unless-stopped
     env_file:
       - variables.env
     networks:
@@ -11,18 +12,24 @@ services:
       test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
       timeout: 5s
       retries: 10
+    volumes:
+      - mysql_data:/var/lib/mysql
 
   redis:
     image: redis:alpine
+    restart: unless-stopped
     networks:
       - webhashcat
     healthcheck:
       test: ["CMD", "redis-cli","ping"]
       timeout: 5s
       retries: 10
+    volumes:
+      - redis_data:/data
 
   web:
     build: .
+    restart: unless-stopped
     command: python3 manage.py runserver 0.0.0.0:8000
     ports:
       - 8000:8000
@@ -40,14 +47,15 @@ services:
 
   celery:
     build: .
+    restart: unless-stopped
     command: celery -A WebHashcat worker -B -l info
     env_file:
       - variables.env
     volumes:
       - ./Files:/webhashcat/Files
-    depends_on:
-      - redis
-      - db
+    #depends_on:
+    #  - redis
+    #  - db
     networks:
       - webhashcat
     depends_on:
@@ -60,3 +68,7 @@ networks:
   webhashcat:
     name: webhashcat
     driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:

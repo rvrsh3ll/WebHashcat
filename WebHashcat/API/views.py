@@ -27,6 +27,7 @@ from django.db import connection
 from django.contrib import messages
 from django.db.models import Sum
 from django.views.decorators.csrf import csrf_exempt
+from django.utils.html import escape
 
 from django.shortcuts import get_object_or_404
 
@@ -64,28 +65,58 @@ def api_node_status(request):
             hashcat_api = HashcatAPI(node.hostname, node.port, node.username, node.password)
             node_data = hashcat_api.get_hashcat_info()
 
-            status = "Stopped"
-            for session in node_data["sessions"]:
-                if session["status"] == "Running":
-                    status = "Running"
-                    break
+            if node_data != None:
+                nb_running = 0
+                running = {}
 
-            data.append([
-                node.name,
-                node_data["version"],
-                status,
-            ])
+                status = "Stopped"
+                for session in node_data["sessions"]:
+                    print(session)
+                    if session["status"] == "Running":
+                        nb_running += 1
+                        status = "Running"
+
+                        session = Session.objects.filter(name=session["name"]).first()
+
+                        if session != None:
+                            if not session.hashfile.owner.username in running:
+                                running[session.hashfile.owner.username] = 0
+                            running[session.hashfile.owner.username] += 1
+                        else:
+                            if not "unknown" in running:
+                                running["unknown"] = 0
+                            running["unknown"] += 1
+
+                running_text = []
+                for username, nb in running.items():
+                    running_text.append("%s: %d" % (username, nb))
+
+                data.append([
+                    escape(node.name),
+                    node_data["version"],
+                    status,
+                    "<br/>".join(running_text)
+                ])
+            else:
+                data.append([
+                    escape(node.name),
+                    "",
+                    "Disconnected",
+                    ""
+                ])
         except ConnectionRefusedError:
             data.append([
-                node.name,
+                escape(node.name),
                 "",
                 "Error",
+                ""
             ])
         except requests.exceptions.ConnectionError:
             data.append([
-                node.name,
+                escape(node.name),
                 "",
                 "Error",
+                ""
             ])
 
     result["data"] = data
@@ -185,7 +216,19 @@ def api_running_sessions(request):
             hashcat_api = HashcatAPI(node.hostname, node.port, node.username, node.password)
             session_info = hashcat_api.get_session_info(session.name)
 
-            if session_info['response'] != 'error' and session_info["status"] == "Running":
+            if session_info == None:
+                data.append({
+                    "hashfile": escape(session.hashfile.name),
+                    "node": escape(node.name),
+                    "type": "",
+                    "rule_mask": "",
+                    "wordlist": "",
+                    "remaining": "",
+                    "progress": "",
+                    "speed": "",
+                })
+
+            elif session_info['response'] != 'error' and session_info["status"] == "Running":
                 if session_info["crack_type"] == "dictionary":
                     rule_mask = session_info["rule"]
                     wordlist = session_info["wordlist"]
@@ -194,11 +237,11 @@ def api_running_sessions(request):
                     wordlist = ""
 
                 data.append({
-                    "hashfile": session.hashfile.name,
-                    "node": node.name,
-                    "type": session_info["crack_type"],
-                    "rule_mask": rule_mask,
-                    "wordlist": wordlist,
+                    "hashfile": escape(session.hashfile.name),
+                    "node": escape(node.name),
+                    "type": escape(session_info["crack_type"]),
+                    "rule_mask": escape(rule_mask),
+                    "wordlist": escape(wordlist),
                     "remaining": session_info["time_estimated"],
                     "progress": "%s %%" % session_info["progress"],
                     "speed": session_info["speed"].split('@')[0].strip(),
@@ -234,7 +277,17 @@ def api_error_sessions(request):
             hashcat_api = HashcatAPI(node.hostname, node.port, node.username, node.password)
             session_info = hashcat_api.get_session_info(session.name)
 
-            if session_info['response'] != 'error' and not session_info["status"] in ["Not started", "Running", "Paused", "Done"]:
+            if session_info == None:
+                data.append({
+                    "hashfile": escape(session.hashfile.name),
+                    "node": escape(node.name),
+                    "type": "",
+                    "rule_mask": "",
+                    "wordlist": "",
+                    "status": "Disconnected from node",
+                    "reason": "",
+                })
+            elif session_info['response'] != 'error' and not session_info["status"] in ["Not started", "Running", "Paused", "Done"]:
                 if session_info["crack_type"] == "dictionary":
                     rule_mask = session_info["rule"]
                     wordlist = session_info["wordlist"]
@@ -243,18 +296,18 @@ def api_error_sessions(request):
                     wordlist = ""
 
                 data.append({
-                    "hashfile": session.hashfile.name,
-                    "node": node.name,
-                    "type": session_info["crack_type"],
-                    "rule_mask": rule_mask,
-                    "wordlist": wordlist,
-                    "status": session_info["status"],
-                    "reason": session_info["reason"],
+                    "hashfile": escape(session.hashfile.name),
+                    "node": escape(node.name),
+                    "type": escape(session_info["crack_type"]),
+                    "rule_mask": escape(rule_mask),
+                    "wordlist": escape(wordlist),
+                    "status": escape(session_info["status"]),
+                    "reason": escape(session_info["reason"]),
                 })
             elif session_info['response'] == 'error':
                 data.append({
-                    "hashfile": session.hashfile.name,
-                    "node": node.name,
+                    "hashfile": escape(session.hashfile.name),
+                    "node": escape(node.name),
                     "type": "",
                     "rule_mask": "",
                     "wordlist": "",
@@ -289,8 +342,9 @@ def api_hashfiles(request):
         try:
             hashcat_api = HashcatAPI(node.hostname, node.port, node.username, node.password)
             hashcat_info = hashcat_api.get_hashcat_info()
-            for session in hashcat_info["sessions"]:
-                session_status[session["name"]] = session["status"]
+            if hashcat_info != None:
+                for session in hashcat_info["sessions"]:
+                    session_status[session["name"]] = session["status"]
         except requests.exceptions.ConnectionError:
             pass
         except ConnectionRefusedError:
@@ -312,7 +366,7 @@ def api_hashfiles(request):
     data = []
     for hashfile in hashfile_list:
             buttons = "<a href='%s'><button title='Export cracked results' class='btn btn-info btn-xs' ><span class='glyphicon glyphicon-download-alt'></span></button></a>" % reverse('Hashcat:export_cracked', args=(hashfile.id,))
-            buttons += "<button title='Create new cracking session' style='margin-left: 5px' class='btn btn-primary btn-xs' data-toggle='modal' data-target='#action_new' data-hashfile='%s' data-hashfile_id=%d ><span class='glyphicon glyphicon-plus'></span></button>" % (hashfile.name, hashfile.id)
+            buttons += "<button title='Create new cracking session' style='margin-left: 5px' class='btn btn-primary btn-xs' data-toggle='modal' data-target='#action_new' data-hashfile='%s' data-hashfile_id=%d ><span class='glyphicon glyphicon-plus'></span></button>" % (escape(hashfile.name), hashfile.id)
             buttons += "<button title='Remove hashfile' style='margin-left: 5px' type='button' class='btn btn-danger btn-xs' onClick='hashfile_action(%d, \"%s\")'><span class='glyphicon glyphicon-remove'></span></button>" % (hashfile.id, "remove")
 
             buttons = "<div style='float: right'>%s</div>" % buttons
@@ -326,17 +380,21 @@ def api_hashfiles(request):
                 except KeyError:
                     pass
 
-
-            data.append({
+            item = {
                 "DT_RowId": "row_%d" % hashfile.id,
-                "name": "<a href='%s'>%s<a/>" % (reverse('Hashcat:hashfile', args=(hashfile.id,)), hashfile.name),
-                "type": "Plaintext" if hashfile.hash_type == -1 else Hashcat.get_hash_types()[hashfile.hash_type]["name"],
+                "name": "<a href='%s'>%s<a/>" % (reverse('Hashcat:hashfile', args=(hashfile.id,)), escape(hashfile.name)),
+                "type": "Plaintext" if hashfile.hash_type == -1 else escape(Hashcat.get_hash_types()[hashfile.hash_type]["name"]),
                 "line_count": humanize.intcomma(hashfile.line_count),
                 "cracked": "%s (%.2f%%)" % (humanize.intcomma(hashfile.cracked_count), hashfile.cracked_count/hashfile.line_count*100) if hashfile.line_count > 0 else "0",
                 "username_included": "yes" if hashfile.username_included else "no",
                 "sessions_count": "%d / %d" % (running_session_count, total_session_count),
                 "buttons": buttons,
-            })
+            }
+
+            if request.user.is_staff:
+                item['created_by'] = hashfile.owner.username
+
+            data.append(item)
 
     result["data"] = data
 
@@ -378,20 +436,29 @@ def api_hashfile_sessions(request):
         try:
             hashcat_api = HashcatAPI(node.hostname, node.port, node.username, node.password)
             session_info = hashcat_api.get_session_info(session.name)
-            print(session_info)
-            if session_info["response"] != "error":
+            
+            if session_info == None:
+                status = "Disconnected"
+                crack_type = ""
+                rule_mask = ""
+                wordlist = ""
+                remaining = ""
+                progress = ""
+                speed = ""
+                buttons =  "<button title='Remove session' style='margin-left: 5px' type='button' class='btn btn-danger btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-remove'></span></button>" % (escape(session.name), "remove")
+            elif session_info["response"] != "error":
                 if session_info["status"] == "Not started":
-                    buttons =  "<button title='Start session' type='button' class='btn btn-success btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-play'></span></button>" % (session.name, "start")
-                    buttons +=  "<button title='Remove session' style='margin-left: 5px' type='button' class='btn btn-danger btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-remove'></span></button>" % (session.name, "remove")
+                    buttons =  "<button title='Start session' type='button' class='btn btn-success btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-play'></span></button>" % (escape(session.name), "start")
+                    buttons +=  "<button title='Remove session' style='margin-left: 5px' type='button' class='btn btn-danger btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-remove'></span></button>" % (escape(session.name), "remove")
                 elif session_info["status"] == "Running":
-                    buttons =  "<button title='Pause session' type='button' class='btn btn-warning btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-pause'></span></button>" % (session.name, "pause")
-                    buttons +=  "<button title='Stop session' style='margin-left: 5px' type='button' class='btn btn-danger btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-stop'></span></button>" % (session.name, "quit")
+                    buttons =  "<button title='Pause session' type='button' class='btn btn-warning btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-pause'></span></button>" % (escape(session.name), "pause")
+                    buttons +=  "<button title='Stop session' style='margin-left: 5px' type='button' class='btn btn-danger btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-stop'></span></button>" % (escape(session.name), "quit")
                 elif session_info["status"] == "Paused":
-                    buttons =  "<button title='Resume session' type='button' class='btn btn-success btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-play'></span></button>" % (session.name, "resume")
-                    buttons +=  "<button title='Stop session' style='margin-left: 5px' type='button' class='btn btn-danger btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-stop'></span></button>" % (session.name, "quit")
+                    buttons =  "<button title='Resume session' type='button' class='btn btn-success btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-play'></span></button>" % (escape(session.name), "resume")
+                    buttons +=  "<button title='Stop session' style='margin-left: 5px' type='button' class='btn btn-danger btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-stop'></span></button>" % (escape(session.name), "quit")
                 else:
-                    buttons =  "<button title='Start session' type='button' class='btn btn-success btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-play'></span></button>" % (session.name, "start")
-                    buttons +=  "<button title='Remove session' style='margin-left: 5px' type='button' class='btn btn-danger btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-remove'></span></button>" % (session.name, "remove")
+                    buttons =  "<button title='Start session' type='button' class='btn btn-success btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-play'></span></button>" % (escape(session.name), "start")
+                    buttons +=  "<button title='Remove session' style='margin-left: 5px' type='button' class='btn btn-danger btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-remove'></span></button>" % (escape(session.name), "remove")
 
                 buttons = "<div style='float: right'>%s</div>" % buttons
 
@@ -404,12 +471,12 @@ def api_hashfile_sessions(request):
 
                 status = session_info["status"]
                 if status == "Error":
-                    status += ' <a href="#" data-toggle="tooltip" data-placement="right" title="%s"><span class="glyphicon glyphicon-info-sign" aria-hidden="true"></span></a>' % session_info["reason"]
+                    status += ' <a href="#" data-toggle="tooltip" data-placement="right" title="%s"><span class="glyphicon glyphicon-info-sign" aria-hidden="true"></span></a>' % escape(session_info["reason"])
 
-                crack_type = session_info["crack_type"]
-                remaining = session_info["time_estimated"]
-                progress = "%s %%" % session_info["progress"]
-                speed = session_info["speed"]
+                crack_type = escape(session_info["crack_type"])
+                remaining = escape(session_info["time_estimated"])
+                progress = escape("%s %%" % session_info["progress"])
+                speed = escape(session_info["speed"])
             else:
                 status = "Inexistant"
                 crack_type = ""
@@ -418,10 +485,10 @@ def api_hashfile_sessions(request):
                 remaining = ""
                 progress = ""
                 speed = ""
-                buttons =  "<button title='Remove session' style='margin-left: 5px' type='button' class='btn btn-danger btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-remove'></span></button>" % (session.name, "remove")
+                buttons =  "<button title='Remove session' style='margin-left: 5px' type='button' class='btn btn-danger btn-xs' onClick='session_action(\"%s\", \"%s\")'><span class='glyphicon glyphicon-remove'></span></button>" % (escape(session.name), "remove")
 
             data.append({
-                "node": node.name,
+                "node": escape(node.name),
                 "type": crack_type,
                 "rule_mask": rule_mask,
                 "wordlist": wordlist,
@@ -433,7 +500,7 @@ def api_hashfile_sessions(request):
             })
         except requests.exceptions.ConnectionError:
             data.append({
-                "node": node.name,
+                "node": escape(node.name),
                 "type": "",
                 "rule_mask": "",
                 "wordlist": "",
@@ -445,7 +512,7 @@ def api_hashfile_sessions(request):
             })
         except ConnectionRefusedError:
             data.append({
-                "node": node.name,
+                "node": escape(node.name),
                 "type": "",
                 "rule_mask": "",
                 "wordlist": "",
@@ -507,9 +574,9 @@ def api_hashfile_cracked(request, hashfile_id):
     data = []
     for cracked in cracked_list:
         if hashfile.username_included:
-            data.append([cracked.username, cracked.password])
+            data.append([escape(cracked.username), escape(cracked.password)])
         else:
-            data.append([cracked.hash, cracked.password])
+            data.append([escape(cracked.hash), escape(cracked.password)])
 
     for query in connection.queries[-3:]:
         print(query["sql"])
@@ -538,7 +605,7 @@ def api_hashfile_top_password(request, hashfile_id, N):
     top_password_list = []
     count_list = []
     for item in pass_count_list:
-        top_password_list.append(item.password)
+        top_password_list.append(escape(item.password))
         count_list.append(item.count)
 
     res = {
@@ -617,7 +684,7 @@ def api_hashfile_top_password_charset(request, hashfile_id, N):
     password_charset_list = []
     count_list = []
     for item in pass_count_list:
-        password_charset_list.append(item.password_charset)
+        password_charset_list.append(escape(item.password_charset))
         count_list.append(item.count)
 
     res = {
@@ -639,6 +706,7 @@ def api_session_action(request):
         params = request.GET
 
     session = get_object_or_404(Session, name=params["session_name"])
+    hashfile = session.hashfile
 
     if hashfile.owner != request.user and not request.user.is_staff:
         raise Http404("You do not have permission to view this object.")
@@ -717,7 +785,7 @@ def api_search_list(request):
         buttons = "<div style='float: right'>%s</div>" % buttons
 
         data.append([
-            search.name,
+            escape(search.name),
             search.status,
             humanize.intcomma(search.output_lines) if search.output_lines != None else "",
             str(datetime.timedelta(seconds=search.processing_time)) if search.processing_time != None else "",

@@ -23,4 +23,5 @@ urlpatterns = [
     re_path(r'^', include('Hashcat.urls', namespace='Hashcat')),
     re_path(r'^api/', include('API.urls', namespace='API')),
     path("admin/", admin.site.urls),
+    path('accounts/', include('django.contrib.auth.urls')),
 ]

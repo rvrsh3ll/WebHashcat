@@ -28,7 +28,7 @@ def verify_password(username, password):
 
 class Server:
 
-    def __init__(self, host, port, auth_user, auth_hash, hash_directory):
+    def __init__(self, host, port, auth_user, auth_hash, hash_directory, custom_directory):
         self._host = host
         self._port = int(port)
         self._app = Flask(__name__)
@@ -40,9 +40,11 @@ class Server:
         httpauth_hash = auth_hash
 
         self.hash_directory = hash_directory
+        self.custom_directory = custom_directory
 
     def _route(self):
         self._app.add_url_rule("/hashcatInfo", "hashcatInfo", self._hashcatInfo, methods=["GET"])
+        self._app.add_url_rule("/load_new", "load_new", self._load_new, methods=["GET"])
         self._app.add_url_rule("/sessionInfo/<session_name>", "sessionInfo", self._sessionInfo, methods=["GET"])
         self._app.add_url_rule("/hashcatOutput/<session_name>", "hashcatOutput", self._hashcatOutput, methods=["GET"])
         self._app.add_url_rule("/hashes/<session_name>", "hashes", self._hashes, methods=["GET"])
@@ -110,6 +112,27 @@ class Server:
             })
 
     """
+        Searches for new wordlist/mask/rules files and load their hashes
+    """
+    @auth.login_required
+    def _load_new(self):
+        try:
+            Hashcat.reload_new()
+            result = {
+                "response": "ok",
+            }
+
+            return json.dumps(result)
+        except Exception as e:
+            traceback.print_exc()
+
+            return json.dumps({
+                "response": "error",
+                "message": str(e),
+            })
+
+
+    """
         Returns information about a specific session :
             - Name
             - Cracking type (rule, mask)
@@ -128,7 +151,7 @@ class Server:
     def _sessionInfo(self, session_name):
         try:
 
-            result = Hashcat.sessions[session_name].details()
+            result = Hashcat.sessions[str(session_name)].details()
             result["response"] = "ok"
 
             return json.dumps(result)
@@ -148,7 +171,7 @@ class Server:
         try:
             result = {}
 
-            result["hashcat_output"] = Hashcat.sessions[session_name].hashcat_output()
+            result["hashcat_output"] = Hashcat.sessions[str(session_name)].hashcat_output()
             result["response"] = "ok"
 
             return json.dumps(result)
@@ -168,7 +191,7 @@ class Server:
         try:
             result = {}
 
-            result["hashes"] = Hashcat.sessions[session_name].hashes()
+            result["hashes"] = Hashcat.sessions[str(session_name)].hashes()
             result["response"] = "ok"
 
             return json.dumps(result)
@@ -187,7 +210,7 @@ class Server:
     def _get_potfile(self, session_name, from_line):
         from_line = int(from_line)
         try:
-            result = Hashcat.sessions[session_name].get_potfile(from_line)
+            result = Hashcat.sessions[str(session_name)].get_potfile(from_line)
             result["response"] = "ok"
 
             return json.dumps(result)
@@ -205,7 +228,7 @@ class Server:
     @auth.login_required
     def _cracked(self, session_name):
         try:
-            cracked = Hashcat.sessions[session_name].cracked()
+            cracked = Hashcat.sessions[str(session_name)].cracked()
 
             return json.dumps({
                 "response": "ok",
@@ -237,7 +260,17 @@ class Server:
             data = json.loads(request.form.get('json'))
 
             random_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(12))
-            hash_file = os.path.join(self.hash_directory, data["name"]+"_"+random_name+".list")
+            hash_file = os.path.join(self.hash_directory, str(data["name"])+"_"+random_name+".list")
+
+            if 'custom_words' in data and len(data['custom_words']) != 0:
+                custom_file = os.path.join(self.custom_directory, random_name+".list")
+                f = open(custom_file, "w", encoding="utf8")
+                for c in data['custom_words']:
+                    f.write("%s\n" % c)
+                f.close()
+            else:
+                custom_file = None
+
 
             file = request.files['file']
             file.save(hash_file)
@@ -248,6 +281,7 @@ class Server:
                 hash_file,
                 int(data["hash_mode_id"]),
                 data["wordlist"] if "wordlist" in data else None,
+                custom_file,
                 data["rule"] if "rule" in data else None,
                 data["mask"] if "mask" in data else None,
                 data["username_included"],
@@ -297,19 +331,20 @@ class Server:
     def _action(self):
         try:
             data = json.loads(request.data.decode())
+            print(data)
 
             if data["action"] == "start":
-                Hashcat.sessions[data["session"]].start()
+                Hashcat.sessions[str(data["session"])].start()
             if data["action"] == "update":
-                Hashcat.sessions[data["session"]].update()
+                Hashcat.sessions[str(data["session"])].update()
             if data["action"] == "pause":
-                Hashcat.sessions[data["session"]].pause()
+                Hashcat.sessions[str(data["session"])].pause()
             if data["action"] == "resume":
-                Hashcat.sessions[data["session"]].resume()
+                Hashcat.sessions[str(data["session"])].resume()
             if data["action"] == "quit":
-                Hashcat.sessions[data["session"]].quit()
+                Hashcat.sessions[str(data["session"])].quit()
             if data["action"] == "remove":
-                Hashcat.remove_session(data["session"])
+                Hashcat.remove_session(str(data["session"]))
 
             res = {"response": "ok"}
 

@@ -6,3 +6,5 @@ humanize
 mysqlclient
 redis
 tzdata
+django-auth-ldap
+python-ldap

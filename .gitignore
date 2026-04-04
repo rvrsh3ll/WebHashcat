@@ -1,5 +1,7 @@
 WebHashcat/WebHashcat/settings.py
 WebHashcat/settings.ini
+WebHashcat/settings.ini.docker
+WebHashcat/variables.env
 WebHashcat/db.sqlite3
 WebHashcat/Files/potfile*
 WebHashcat/Files/tmp/*
@@ -23,6 +25,7 @@ HashcatNode/masks/*.hcmask
 HashcatNode/potfiles/*.potfile
 HashcatNode/wordlists/*.wordlist
 HashcatNode/outputs/*.output
+HashcatNode/custom_lists/*.list
 HashcatNode/hashcatnode.db
 HashcatNode/hashcatnode.log
 TODO

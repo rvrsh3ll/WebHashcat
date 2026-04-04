@@ -26,7 +26,7 @@ class HashcatAPI(object):
     def get_hashcat_info(self):
         return self.send("/hashcatInfo")
 
-    def create_dictionary_session(self, session_name, hashfile, rule, wordlist, device_type, brain_mode, end_timestamp, hashcat_debug_file):
+    def create_dictionary_session(self, session_name, hashfile, rule, wordlist, custom_words, device_type, brain_mode, end_timestamp, hashcat_debug_file):
         hashfile_path = os.path.join(os.path.dirname(__file__), "..", "Files", "Hashfiles", hashfile.hashfile)
 
         from Utils.hashcat import Hashcat
@@ -42,6 +42,7 @@ class HashcatAPI(object):
                 "hash_mode_id": hashfile.hash_type,
                 "rule": rule,
                 "wordlist": wordlist,
+                "custom_words": custom_words,
                 "username_included": False,
                 "device_type": device_type,
                 "brain_mode": brain_mode,
@@ -55,7 +56,7 @@ class HashcatAPI(object):
 
         return res
 
-    def create_mask_session(self, session_name, hashfile, mask, device_type, brain_mode, end_timestamp, hashcat_debug_file):
+    def create_mask_session(self, session_name, hashfile, mask, custom_masks, device_type, brain_mode, end_timestamp, hashcat_debug_file):
         hashfile_path = os.path.join(os.path.dirname(__file__), "..", "Files", "Hashfiles", hashfile.hashfile)
 
         from Utils.hashcat import Hashcat
@@ -72,6 +73,7 @@ class HashcatAPI(object):
                 "crack_type": "mask",
                 "hash_mode_id": hashfile.hash_type,
                 "mask": mask,
+                "custom_words": custom_masks,
                 "username_included": False,
                 "device_type": device_type,
                 "brain_mode": brain_mode,
@@ -93,6 +95,9 @@ class HashcatAPI(object):
         }
 
         return self.send("/action", data=payload)
+
+    def load_new(self):
+        return self.send("/load_new")
 
     def get_session_info(self, session_name):
         return self.send("/sessionInfo/%s" % session_name)
@@ -166,7 +171,10 @@ class HashcatAPI(object):
             data = res.text
 
             #conn.close()
-            return json.loads(data)
+            if res.status_code in [200, 201]:
+                return json.loads(data)
+            else:
+                return None
         except requests.exceptions.ConnectionError:
             return None
 

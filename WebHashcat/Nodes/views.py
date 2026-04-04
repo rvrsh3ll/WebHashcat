@@ -72,6 +72,10 @@ def node(request, node_name, error_msg=""):
         if request.POST["action"] == "synchronize":
 
             hashcat_api = HashcatAPI(node_item.hostname, node_item.port, node_item.username, node_item.password)
+            # First load new files if existing
+            hashcat_api.load_new()
+
+
             node_data = hashcat_api.get_hashcat_info()
 
             rule_list = Hashcat.get_rules()
@@ -100,7 +104,9 @@ def node(request, node_name, error_msg=""):
         hashcat_api = HashcatAPI(node_item.hostname, node_item.port, node_item.username, node_item.password)
         node_data = hashcat_api.get_hashcat_info()
 
-        if node_data["response"] == "error":
+        if node_data == None:
+            return nodes(request, error_msg="Unable to connect to node %s at: %s:%d" % (node_item.name, node_item.hostname, node_item.port))
+        elif node_data["response"] == "error":
             return node(request, node_name, error_msg=node_data["message"])
     except requests.exceptions.ConnectionError:
         return nodes(request, error_msg="Unable to connect to node %s at: %s:%d" % (node_item.name, node_item.hostname, node_item.port))

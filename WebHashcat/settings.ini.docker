@@ -1,3 +1,0 @@
-[Hashcat]
-binary = /hashcat/hashcat
-potfile = /webhashcat/Files/potfile

@@ -12,6 +12,7 @@ import threading
 import tempfile
 import traceback
 import humanize
+import hashlib
 from shutil import copyfile
 from os import listdir
 from os.path import isfile, join
@@ -53,6 +54,38 @@ class Hashcat(object):
         return config["Hashcat"]["potfile"]
 
     @classmethod
+    def get_integrity_algo(self):
+        config = configparser.ConfigParser()
+        utils_dir =  os.path.dirname(os.path.abspath( __file__ ))
+        config.read(os.path.join(utils_dir, '..', 'settings.ini'))
+
+        return config["Hashcat"]["integrity"]
+
+    @classmethod
+    def calculate_file_hash(self, path):
+        integrity_algo = self.get_integrity_algo()
+
+        if integrity_algo == 'md5':
+            with open(file, "rb") as f:
+                file_hash = hashlib.md5()
+                while True:
+                    chunk = f.read(8192)
+                    if not chunk:
+                        break
+                    file_hash.update(chunk)
+
+                file_hash = file_hash.hexdigest()
+        elif integrity_algo == 'filename':
+            filename = os.path.basename(path)
+
+            file_hash = hashlib.md5()
+            file_hash.update(filename.encode())
+            file_hash = file_hash.hexdigest()
+
+        return file_hash
+
+
+    @classmethod
     def get_hash_types(self):
         if len(self._hash_types) == 0:
             self.parse_help()
@@ -81,12 +114,14 @@ class Hashcat(object):
     """
     @classmethod
     def parse_help(self):
+        print("HELP")
+        print(self.get_binary())
 
         help_section = None
         help_section_regex = re.compile("^- \[ (?P<section_name>.*) \] -$")
         hash_mode_regex = re.compile("^\s*(?P<id>\d+)\s+\|\s+(?P<name>.+)\s+\|\s+(?P<description>.+)\s*$")
 
-        hashcat_help = subprocess.Popen([self.get_binary(), '--help'], stdout=subprocess.PIPE)
+        hashcat_help = subprocess.Popen([self.get_binary(), '-hh'], stdout=subprocess.PIPE)
         for line in hashcat_help.stdout:
             line = line.decode()
             line = line.rstrip()
@@ -99,7 +134,7 @@ class Hashcat(object):
                 help_section = section_match.group("section_name")
                 continue
 
-            if help_section == "Hash modes":
+            if help_section != None and help_section.lower() == "hash modes":
                 hash_mode_match = hash_mode_regex.match(line)
                 if hash_mode_match:
                     self._hash_types[int(hash_mode_match.group("id"))] = {
@@ -419,10 +454,22 @@ class Hashcat(object):
     def get_rules(self, detailed=True):
 
         res = []
+        path = os.path.join(os.path.dirname(__file__), "..", "Files", "Rulefiles")
         if not detailed:
-            path = os.path.join(os.path.dirname(__file__), "..", "Files", "Rulefiles")
             res = [{"name": f} for f in listdir(path) if isfile(join(path, f)) and f.endswith(".rule")]
         else:
+            file_list = [join(path, f) for f in listdir(path) if isfile(join(path, f)) and f.endswith(".rule")]
+
+            for file in file_list:
+                file_hash = self.calculate_file_hash(file)
+
+                res.append({
+                    "name": os.path.basename(file),
+                    "md5": file_hash,
+                    "path": file,
+                })
+
+            """
             path = os.path.join(os.path.dirname(__file__), "..", "Files", "Rulefiles", "*")
             # use md5sum instead of python code for performance issues on a big file
             result = subprocess.run('md5sum %s' % path, shell=True, stdout=subprocess.PIPE).stdout.decode()
@@ -435,6 +482,7 @@ class Hashcat(object):
                         "md5": items[0],
                         "path": items[1],
                         })
+            """
 
         return sorted(res, key=itemgetter('name'))
 
@@ -442,10 +490,23 @@ class Hashcat(object):
     def get_masks(self, detailed=True):
 
         res = []
+        path = os.path.join(os.path.dirname(__file__), "..", "Files", "Maskfiles")
         if not detailed:
-            path = os.path.join(os.path.dirname(__file__), "..", "Files", "Maskfiles")
             res = [{"name": f} for f in listdir(path) if isfile(join(path, f)) and f.endswith(".hcmask")]
         else:
+
+            file_list = [join(path, f) for f in listdir(path) if isfile(join(path, f)) and f.endswith(".hcmask")]
+
+            for file in file_list:
+                file_hash = self.calculate_file_hash(file)
+
+                res.append({
+                    "name": os.path.basename(file),
+                    "md5": file_hash,
+                    "path": file,
+                })
+
+            """
             path = os.path.join(os.path.dirname(__file__), "..", "Files", "Maskfiles", "*")
             # use md5sum instead of python code for performance issues on a big file
             result = subprocess.run('md5sum %s' % path, shell=True, stdout=subprocess.PIPE).stdout.decode()
@@ -458,6 +519,7 @@ class Hashcat(object):
                         "md5": items[0],
                         "path": items[1],
                         })
+            """
 
         return sorted(res, key=itemgetter('name'))
 
@@ -465,11 +527,23 @@ class Hashcat(object):
     def get_wordlists(self, detailed=True):
 
         res = []
+        path = os.path.join(os.path.dirname(__file__), "..", "Files", "Wordlistfiles")
         if not detailed:
-            path = os.path.join(os.path.dirname(__file__), "..", "Files", "Wordlistfiles")
 
             res = [{"name": f} for f in listdir(path) if isfile(join(path, f)) and f.endswith(".wordlist")]
         else:
+            file_list = [join(path, f) for f in listdir(path) if isfile(join(path, f)) and f.endswith(".wordlist")]
+
+            for file in file_list:
+                file_hash = self.calculate_file_hash(file)
+
+                res.append({
+                    "name": os.path.basename(file),
+                    "md5": file_hash,
+                    "path": file,
+                })
+
+            """
             path = os.path.join(os.path.dirname(__file__), "..", "Files", "Wordlistfiles", "*")
             # use md5sum instead of python code for performance issues on a big file
             result = subprocess.run('md5sum %s' % path, shell=True, stdout=subprocess.PIPE).stdout.decode()
@@ -489,6 +563,7 @@ class Hashcat(object):
                         print("Unicode decode error in file %s" % items[1])
                         info["lines"] = "error"
                     res.append(info)
+            """
 
 
         return sorted(res, key=itemgetter('name'))

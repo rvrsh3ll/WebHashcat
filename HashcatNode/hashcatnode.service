@@ -1,0 +1,13 @@
+[Unit]
+Description=Hashcat Node
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/WebHashcat/HashcatNode/
+ExecStart=/opt/WebHashcat/HashcatNode/venv/bin/python3 /opt/WebHashcat/HashcatNode/hashcatnode.py
+
+# Environment
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
